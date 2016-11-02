@@ -223,12 +223,12 @@ trait ElasticquentTrait
      */
     public static function searchByQuery($query = null, $aggregations = null, $sourceFields = null, $limit = null, $offset = null, $sort = null)
     {
+        /** @var \App\Post $instance */
         $instance = new static;
-
         $params = $instance->getBasicEsParams(true, true, true, $limit, $offset);
 
         if (!empty($sourceFields)) {
-            $params['body']['_source']['include'] = $sourceFields;
+            $params['body']['_source'] = $sourceFields;
         }
 
         if (!empty($query)) {
@@ -242,9 +242,7 @@ trait ElasticquentTrait
         if (!empty($sort)) {
             $params['body']['sort'] = $sort;
         }
-
         $result = $instance->getElasticSearchClient()->search($params);
-
         return static::hydrateElasticsearchResult($result);
     }
 
@@ -379,7 +377,7 @@ trait ElasticquentTrait
 
         $fields = $this->buildFieldsParameter($getSourceIfPossible, $getTimestampIfPossible);
         if (!empty($fields)) {
-            $params['fields'] = implode(',', $fields);
+            $params['_source'] = implode(',', $fields);
         }
 
         if (is_numeric($limit)) {
@@ -645,9 +643,11 @@ trait ElasticquentTrait
     public static function hydrateElasticquentResult(array $items, $meta = null)
     {
         $instance = new static;
-
-        $items = array_map(function ($item) use ($instance) {
-            return $instance->newFromHitBuilder($item);
+        $list = collect($items)->pluck('_id');
+        /** @var ElasticquentResultCollection $models */
+        $models = static::whereIn($instance->getKeyName(), $list)->get()->keyBy($instance->getKeyName());
+        $items = array_map(function ($item) use ($instance, $models) {
+            return $models->get($item['_id']);
         }, $items);
 
         return $instance->newElasticquentResultCollection($items, $meta);
